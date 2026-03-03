@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+logs/
+checkpoints/
+*.pt
+.DS_Store

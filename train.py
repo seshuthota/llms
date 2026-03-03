@@ -7,6 +7,7 @@ from datasets import load_dataset
 import os
 import logging
 from datetime import datetime
+import json
 
 
 def setup_logging(log_dir="logs"):
@@ -227,7 +228,7 @@ if __name__ == "__main__":
     else:
         logger.info("Starting training from scratch")
 
-    num_epochs = 5
+    num_epochs = 10
     print_every = 100
     gradient_accumulation_steps = 8  # Effective batch = 1 × 8 = 8
 

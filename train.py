@@ -223,6 +223,11 @@ if __name__ == "__main__":
         checkpoint = torch.load(resume_checkpoint, map_location=device)
         model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        # Move optimizer state tensors to the correct device
+        for state in optimizer.state.values():
+            for k, v in state.items():
+                if isinstance(v, torch.Tensor):
+                    state[k] = v.to(device)
         start_epoch = checkpoint.get("epoch", 0)
         logger.info(f"Resumed from epoch {start_epoch}")
     else:

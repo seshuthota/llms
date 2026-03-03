@@ -63,6 +63,7 @@ def train_model(
     logger=None,
     save_dir="checkpoints",
     use_amp=True,
+    gradient_accumulation_steps=1,
 ):
     os.makedirs(save_dir, exist_ok=True)
     model.to(device)
@@ -80,30 +81,36 @@ def train_model(
         model.train()
         epoch_loss = 0.0
         epoch_start = datetime.now()
+        optimizer.zero_grad()
 
         for batch_idx, (input_batch, target_batch) in enumerate(train_loader):
             loss = calc_loss_batch(input_batch, target_batch, model, device, use_amp)
-
-            optimizer.zero_grad()
+            loss = loss / gradient_accumulation_steps
 
             if use_amp and scaler is not None:
                 scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                scaler.step(optimizer)
-                scaler.update()
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                optimizer.step()
+
+            if (batch_idx + 1) % gradient_accumulation_steps == 0:
+                if use_amp and scaler is not None:
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                    optimizer.step()
+
+                optimizer.zero_grad()
 
             global_step += 1
-            epoch_loss += loss.item()
+            epoch_loss += loss.item() * gradient_accumulation_steps
 
             if global_step % print_every == 0:
                 avg_loss = epoch_loss / (batch_idx + 1)
                 lr = optimizer.param_groups[0]["lr"]
-                msg = f"Epoch {epoch + 1}/{num_epochs} | Step {global_step} | Batch loss: {loss.item():.4f} | Avg loss: {avg_loss:.4f} | LR: {lr:.2e}"
+                msg = f"Epoch {epoch + 1}/{num_epochs} | Step {global_step} | Batch loss: {loss.item() * gradient_accumulation_steps:.4f} | Avg loss: {avg_loss:.4f} | LR: {lr:.2e}"
                 if logger:
                     logger.info(msg)
                 else:
@@ -172,18 +179,18 @@ if __name__ == "__main__":
     train_loader = create_dataloader_from_huggingface(
         dataset,
         tokenizer,
-        batch_size=2,  # Reduced from 4
-        max_length=1024,  # Keep full context
+        batch_size=1,  # Small batch for memory
+        max_length=1024,
         stride=128,
         shuffle=True,
         streaming=True,
-        max_samples=100000,  # Limit samples for memory efficiency
+        max_samples=100000,
     )
 
     model = GPTModel(
         vocab_size=vocab_size,
         emb_dim=768,
-        context_length=1024,  # Keep full context
+        context_length=1024,
         num_heads=12,
         num_layers=12,
         dropout=0.1,
@@ -197,9 +204,12 @@ if __name__ == "__main__":
     logger.info(f"Optimizer: AdamW (lr=3e-4, weight_decay=0.1)")
 
     num_epochs = 5
-    print_every = 50
+    print_every = 100
+    gradient_accumulation_steps = 8  # Effective batch = 1 × 8 = 8
 
-    logger.info(f"Training config: epochs={num_epochs}, batch_size=2, max_length=1024")
+    logger.info(
+        f"Training config: epochs={num_epochs}, batch_size=1, grad_accum={gradient_accumulation_steps}, max_length=1024"
+    )
     logger.info("=" * 50)
     logger.info("Starting training...")
     logger.info("=" * 50)

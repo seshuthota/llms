@@ -1,5 +1,5 @@
 import torch
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from tokenizer import GPTTokenizer
 from dataset import create_dataloader_from_huggingface
 from model import GPTModel
@@ -25,7 +25,7 @@ def setup_logging(log_dir="logs"):
 def calc_loss_batch(input_batch, target_batch, model, device, use_amp=False):
     input_batch, target_batch = input_batch.to(device), target_batch.to(device)
 
-    with autocast(enabled=use_amp):
+    with autocast("cuda", enabled=use_amp):
         logits = model(input_batch)
         logits_flat = logits.flatten(0, 1)
         targets_flat = target_batch.flatten()
@@ -67,7 +67,7 @@ def train_model(
     os.makedirs(save_dir, exist_ok=True)
     model.to(device)
 
-    scaler = GradScaler() if use_amp else None
+    scaler = GradScaler("cuda") if use_amp else None
 
     for module in model.modules():
         if hasattr(module, "gradient_checkpointing_enable"):
@@ -172,8 +172,8 @@ if __name__ == "__main__":
     train_loader = create_dataloader_from_huggingface(
         dataset,
         tokenizer,
-        batch_size=8,
-        max_length=1024,
+        batch_size=4,  # Reduced from 8
+        max_length=512,  # Reduced from 1024
         stride=128,
         shuffle=True,
         streaming=True,
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     model = GPTModel(
         vocab_size=vocab_size,
         emb_dim=768,
-        context_length=1024,
+        context_length=512,  # Must match max_length
         num_heads=12,
         num_layers=12,
         dropout=0.1,
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     num_epochs = 5
     print_every = 50
 
-    logger.info(f"Training config: epochs={num_epochs}, batch_size=8, max_length=1024")
+    logger.info(f"Training config: epochs={num_epochs}, batch_size=4, max_length=512")
     logger.info("=" * 50)
     logger.info("Starting training...")
     logger.info("=" * 50)

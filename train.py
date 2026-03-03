@@ -64,6 +64,7 @@ def train_model(
     save_dir="checkpoints",
     use_amp=True,
     gradient_accumulation_steps=1,
+    start_epoch=0,
 ):
     os.makedirs(save_dir, exist_ok=True)
     model.to(device)
@@ -77,7 +78,7 @@ def train_model(
     global_step = 0
     history = {"epoch": [], "train_loss": [], "lr": []}
 
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
         model.train()
         epoch_loss = 0.0
         epoch_start = datetime.now()
@@ -200,8 +201,31 @@ if __name__ == "__main__":
         f"Model initialized: {sum(p.numel() for p in model.parameters()):,} parameters"
     )
 
+    # Initialize optimizer first
     optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=0.1)
     logger.info(f"Optimizer: AdamW (lr=3e-4, weight_decay=0.1)")
+
+    # Check for existing checkpoint to resume training
+    save_dir = "checkpoints"
+    resume_checkpoint = None
+    if os.path.exists(save_dir):
+        checkpoints = [
+            f for f in os.listdir(save_dir) if f.startswith("checkpoint_epoch_")
+        ]
+        if checkpoints:
+            latest_checkpoint = sorted(checkpoints)[-1]
+            resume_checkpoint = os.path.join(save_dir, latest_checkpoint)
+
+    start_epoch = 0
+    if resume_checkpoint:
+        logger.info(f"Resuming from checkpoint: {resume_checkpoint}")
+        checkpoint = torch.load(resume_checkpoint, map_location=device)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        start_epoch = checkpoint.get("epoch", 0)
+        logger.info(f"Resumed from epoch {start_epoch}")
+    else:
+        logger.info("Starting training from scratch")
 
     num_epochs = 5
     print_every = 100
@@ -222,6 +246,7 @@ if __name__ == "__main__":
         num_epochs=num_epochs,
         print_every=print_every,
         logger=logger,
+        start_epoch=start_epoch,
     )
 
     torch.save(model.state_dict(), "gpt_model.pt")

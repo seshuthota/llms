@@ -133,9 +133,13 @@ if __name__ == "__main__":
     dataset = load_dataset("roneneldan/TinyStories", split="train")
     logger.info(f"Dataset loaded: {len(dataset)} samples")
 
-    max_samples = 10000
-    dataset_subset = dataset.select(range(max_samples))
-    logger.info(f"Using first {max_samples} samples")
+    max_samples = None  # Use None for full dataset, or set to integer for subset
+    dataset_subset = (
+        dataset if max_samples is None else dataset.select(range(max_samples))
+    )
+    logger.info(
+        f"Using {'full dataset' if max_samples is None else f'first {max_samples} samples'}"
+    )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")

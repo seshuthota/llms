@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from tokenizer import GPTTokenizer
+from tqdm import tqdm
 
 
 class GPTDataset(Dataset):
@@ -39,28 +40,39 @@ class HuggingFaceGPTDataset(Dataset):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.stride = stride
-        self.input_ids = []
-        self.target_ids = []
+        self.hf_dataset = hf_dataset
 
+        if max_samples is not None:
+            self.total_samples = max_samples
+        else:
+            self.total_samples = len(hf_dataset)
+
+        self.sequences = []
+        self._build_sequences(max_samples)
+
+    def _build_sequences(self, max_samples=None):
         samples = (
-            list(hf_dataset) if max_samples is None else list(hf_dataset)[:max_samples]
+            self.hf_dataset
+            if max_samples is None
+            else list(self.hf_dataset[:max_samples])
         )
 
-        for example in samples:
+        for example in tqdm(samples, desc="Tokenizing"):
             text = example["text"]
             token_ids = self.tokenizer.encode(text)
 
-            for i in range(0, len(token_ids) - max_length, stride):
-                input_chunk = token_ids[i : i + max_length]
-                target_chunk = token_ids[i + 1 : i + max_length + 1]
-                self.input_ids.append(torch.tensor(input_chunk))
-                self.target_ids.append(torch.tensor(target_chunk))
+            for i in range(0, len(token_ids) - self.max_length, self.stride):
+                input_chunk = token_ids[i : i + self.max_length]
+                target_chunk = token_ids[i + 1 : i + self.max_length + 1]
+                self.sequences.append(
+                    (torch.tensor(input_chunk), torch.tensor(target_chunk))
+                )
 
     def __len__(self):
-        return len(self.input_ids)
+        return len(self.sequences)
 
     def __getitem__(self, index):
-        return self.input_ids[index], self.target_ids[index]
+        return self.sequences[index]
 
 
 def create_dataloader_from_huggingface(

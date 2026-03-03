@@ -1,4 +1,5 @@
 import torch
+from torch.cuda.amp import autocast, GradScaler
 from tokenizer import GPTTokenizer
 from dataset import create_dataloader_from_huggingface
 from model import GPTModel
@@ -21,14 +22,15 @@ def setup_logging(log_dir="logs"):
     return logging.getLogger(__name__)
 
 
-def calc_loss_batch(input_batch, target_batch, model, device):
+def calc_loss_batch(input_batch, target_batch, model, device, use_amp=False):
     input_batch, target_batch = input_batch.to(device), target_batch.to(device)
 
-    logits = model(input_batch)
-    logits_flat = logits.flatten(0, 1)
-    targets_flat = target_batch.flatten()
+    with autocast(enabled=use_amp):
+        logits = model(input_batch)
+        logits_flat = logits.flatten(0, 1)
+        targets_flat = target_batch.flatten()
+        loss = torch.nn.functional.cross_entropy(logits_flat, targets_flat)
 
-    loss = torch.nn.functional.cross_entropy(logits_flat, targets_flat)
     return loss
 
 
@@ -60,9 +62,16 @@ def train_model(
     print_every=10,
     logger=None,
     save_dir="checkpoints",
+    use_amp=True,
 ):
     os.makedirs(save_dir, exist_ok=True)
     model.to(device)
+
+    scaler = GradScaler() if use_amp else None
+
+    for module in model.modules():
+        if hasattr(module, "gradient_checkpointing_enable"):
+            module.gradient_checkpointing_enable()
 
     global_step = 0
     history = {"epoch": [], "train_loss": [], "lr": []}
@@ -73,12 +82,20 @@ def train_model(
         epoch_start = datetime.now()
 
         for batch_idx, (input_batch, target_batch) in enumerate(train_loader):
-            loss = calc_loss_batch(input_batch, target_batch, model, device)
+            loss = calc_loss_batch(input_batch, target_batch, model, device, use_amp)
 
             optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+
+            if use_amp and scaler is not None:
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
 
             global_step += 1
             epoch_loss += loss.item()

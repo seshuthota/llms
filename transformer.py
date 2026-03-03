@@ -70,8 +70,20 @@ class TransformerBlock(nn.Module):
         self.norm2 = LayerNorm(emb_dim=emb_dim)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x):
+    def _forward(self, x):
         attn_out = self.att(self.norm1(x))
+        attn_out = self.dropout(attn_out)
+
+        x = x + attn_out
+
+        ffn_out = self.ffn(self.norm2(x))
+        ffn_out = self.dropout(ffn_out)
+
+        x = x + ffn_out
+        return x
+
+    def forward(self, x):
+        return self._forward(x)
         attn_out = self.dropout(attn_out)
 
         x = x + attn_out

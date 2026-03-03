@@ -109,7 +109,7 @@ def train_model(
                 else:
                     print(msg)
 
-        avg_epoch_loss = epoch_loss / len(train_loader)
+        avg_epoch_loss = epoch_loss / max(batch_idx + 1, 1)
         history["epoch"].append(epoch + 1)
         history["train_loss"].append(avg_epoch_loss)
         history["lr"].append(optimizer.param_groups[0]["lr"])
@@ -147,16 +147,14 @@ if __name__ == "__main__":
     logger.info("=" * 50)
 
     logger.info("Loading TinyStories dataset from HuggingFace...")
-    dataset = load_dataset("roneneldan/TinyStories", split="train")
-    logger.info(f"Dataset loaded: {len(dataset)} samples")
+    dataset = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
+    logger.info("Dataset loaded in streaming mode")
 
     max_samples = None  # Use None for full dataset, or set to integer for subset
-    dataset_subset = (
-        dataset if max_samples is None else dataset.select(range(max_samples))
-    )
-    logger.info(
-        f"Using {'full dataset' if max_samples is None else f'first {max_samples} samples'}"
-    )
+
+    use_streaming = True
+    if use_streaming:
+        logger.info("Using streaming mode for memory efficiency")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
@@ -172,12 +170,14 @@ if __name__ == "__main__":
     logger.info(f"Vocabulary size: {vocab_size}")
 
     train_loader = create_dataloader_from_huggingface(
-        dataset_subset,
+        dataset,
         tokenizer,
         batch_size=8,
         max_length=1024,
         stride=128,
         shuffle=True,
+        streaming=True,
+        max_samples=100000,  # Limit samples for memory efficiency
     )
 
     model = GPTModel(

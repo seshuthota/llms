@@ -36,28 +36,35 @@ def create_dataloader(
 
 
 class HuggingFaceGPTDataset(Dataset):
-    def __init__(self, hf_dataset, tokenizer, max_length, stride, max_samples=None):
+    def __init__(
+        self,
+        hf_dataset,
+        tokenizer,
+        max_length,
+        stride,
+        max_samples=None,
+        streaming=False,
+    ):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.stride = stride
-        self.hf_dataset = hf_dataset
+        self.streaming = streaming
 
-        if max_samples is not None:
-            self.total_samples = max_samples
+        if streaming:
+            self.hf_dataset = hf_dataset
+            self.max_samples = max_samples
+            self.total_samples = max_samples if max_samples else float("inf")
         else:
-            self.total_samples = len(hf_dataset)
+            if max_samples is not None:
+                self.hf_dataset = list(hf_dataset[:max_samples])
+            else:
+                self.hf_dataset = list(hf_dataset)
+            self.total_samples = len(self.hf_dataset)
+            self._build_sequences()
 
+    def _build_sequences(self):
         self.sequences = []
-        self._build_sequences(max_samples)
-
-    def _build_sequences(self, max_samples=None):
-        samples = (
-            self.hf_dataset
-            if max_samples is None
-            else list(self.hf_dataset[:max_samples])
-        )
-
-        for example in tqdm(samples, desc="Tokenizing"):
+        for example in tqdm(self.hf_dataset, desc="Tokenizing"):
             text = example["text"]
             token_ids = self.tokenizer.encode(text)
 
@@ -69,10 +76,77 @@ class HuggingFaceGPTDataset(Dataset):
                 )
 
     def __len__(self):
-        return len(self.sequences)
+        return int(self.total_samples)
+
+    def __iter__(self):
+        count = 0
+        for example in self.hf_dataset:
+            if self.max_samples and count >= self.max_samples:
+                break
+
+            text = example["text"]
+            token_ids = self.tokenizer.encode(text)
+
+            for i in range(0, len(token_ids) - self.max_length, self.stride):
+                if self.max_samples and count >= self.max_samples:
+                    break
+
+                input_chunk = token_ids[i : i + self.max_length]
+                target_chunk = token_ids[i + 1 : i + self.max_length + 1]
+
+                yield torch.tensor(input_chunk), torch.tensor(target_chunk)
+                count += 1
 
     def __getitem__(self, index):
+        if self.streaming:
+            raise NotImplementedError("Use iterator for streaming mode")
         return self.sequences[index]
+
+
+class StreamingDataLoader:
+    def __init__(
+        self, hf_dataset, tokenizer, batch_size, max_length, stride, max_samples=None
+    ):
+        self.hf_dataset = hf_dataset
+        self.tokenizer = tokenizer
+        self.batch_size = batch_size
+        self.max_length = max_length
+        self.stride = stride
+        self.max_samples = max_samples
+
+    def __iter__(self):
+        batch_inputs = []
+        batch_targets = []
+        count = 0
+
+        for example in self.hf_dataset:
+            if self.max_samples and count >= self.max_samples:
+                break
+
+            text = example["text"]
+            token_ids = self.tokenizer.encode(text)
+
+            for i in range(0, len(token_ids) - self.max_length, self.stride):
+                if self.max_samples and count >= self.max_samples:
+                    break
+
+                input_chunk = token_ids[i : i + self.max_length]
+                target_chunk = token_ids[i + 1 : i + self.max_length + 1]
+
+                batch_inputs.append(torch.tensor(input_chunk))
+                batch_targets.append(torch.tensor(target_chunk))
+                count += 1
+
+                if len(batch_inputs) >= self.batch_size:
+                    yield torch.stack(batch_inputs), torch.stack(batch_targets)
+                    batch_inputs = []
+                    batch_targets = []
+
+        if batch_inputs:
+            yield torch.stack(batch_inputs), torch.stack(batch_targets)
+
+    def __len__(self):
+        return None  # Unknown length in streaming mode
 
 
 def create_dataloader_from_huggingface(
@@ -83,7 +157,18 @@ def create_dataloader_from_huggingface(
     stride=128,
     shuffle=True,
     max_samples=None,
+    streaming=False,
 ):
+    if streaming:
+        return StreamingDataLoader(
+            hf_dataset=hf_dataset,
+            tokenizer=tokenizer,
+            batch_size=batch_size,
+            max_length=max_length,
+            stride=stride,
+            max_samples=max_samples,
+        )
+
     dataset = HuggingFaceGPTDataset(
         hf_dataset, tokenizer, max_length, stride, max_samples
     )

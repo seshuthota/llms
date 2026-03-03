@@ -172,8 +172,8 @@ if __name__ == "__main__":
     train_loader = create_dataloader_from_huggingface(
         dataset,
         tokenizer,
-        batch_size=4,  # Reduced from 8
-        max_length=512,  # Reduced from 1024
+        batch_size=2,  # Reduced from 4
+        max_length=1024,  # Keep full context
         stride=128,
         shuffle=True,
         streaming=True,
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     model = GPTModel(
         vocab_size=vocab_size,
         emb_dim=768,
-        context_length=512,  # Must match max_length
+        context_length=1024,  # Keep full context
         num_heads=12,
         num_layers=12,
         dropout=0.1,
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     num_epochs = 5
     print_every = 50
 
-    logger.info(f"Training config: epochs={num_epochs}, batch_size=4, max_length=512")
+    logger.info(f"Training config: epochs={num_epochs}, batch_size=2, max_length=1024")
     logger.info("=" * 50)
     logger.info("Starting training...")
     logger.info("=" * 50)

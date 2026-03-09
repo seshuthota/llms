@@ -8,6 +8,7 @@ import os
 import logging
 from datetime import datetime
 import json
+from huggingface_hub import snapshot_download
 
 
 def setup_logging(log_dir="logs"):
@@ -222,16 +223,42 @@ if __name__ == "__main__":
         logger.info(f"Resuming from checkpoint: {resume_checkpoint}")
         checkpoint = torch.load(resume_checkpoint, map_location=device)
         model.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        # Move optimizer state tensors to the correct device
-        for state in optimizer.state.values():
-            for k, v in state.items():
-                if isinstance(v, torch.Tensor):
-                    state[k] = v.to(device)
+        # Attempt to load optimizer state if available
+        if "optimizer_state_dict" in checkpoint:
+            try:
+                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+                # Move optimizer state tensors to the correct device
+                for state in optimizer.state.values():
+                    for k, v in state.items():
+                        if isinstance(v, torch.Tensor):
+                            state[k] = v.to(device)
+            except Exception as e:
+                logger.warning(f"Failed to load optimizer state: {e}. Starting with fresh optimizer.")
         start_epoch = checkpoint.get("epoch", 0)
         logger.info(f"Resumed from epoch {start_epoch}")
     else:
-        logger.info("Starting training from scratch")
+        logger.info("No local checkpoint found. Attempting to fetch base weights from Hugging Face...")
+        hf_token = os.getenv("HF_TOKEN")
+        try:
+            model_path = snapshot_download(
+                repo_id="CuriousDragon/gpt-tinystories",
+                allow_patterns=["pytorch_model.pt"],
+                token=hf_token,
+            )
+            hf_weights_path = f"{model_path}/pytorch_model.pt"
+            state_payload = torch.load(hf_weights_path, map_location=device)
+            
+            # Flexible Dict-mapping to handle any saved config structure
+            if "model_state_dict" in state_payload:
+                model.load_state_dict(state_payload["model_state_dict"])
+            else:
+                model.load_state_dict(state_payload)
+                
+            logger.info("Successfully loaded base weights from Hugging Face!")
+            logger.info("Starting training run with fresh optimizer.")
+        except Exception as e:
+            logger.warning(f"Failed to load weights from Hugging Face: {e}")
+            logger.info("Starting training entirely from scratch.")
 
     num_epochs = 10
     print_every = 100

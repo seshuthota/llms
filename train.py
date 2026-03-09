@@ -260,7 +260,7 @@ if __name__ == "__main__":
             logger.warning(f"Failed to load weights from Hugging Face: {e}")
             logger.info("Starting training entirely from scratch.")
 
-    num_epochs = 10
+    num_epochs = 15
     print_every = 100
     gradient_accumulation_steps = 8  # Effective batch = 1 × 8 = 8
 

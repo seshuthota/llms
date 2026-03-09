@@ -54,13 +54,12 @@ class HuggingFaceGPTDataset(Dataset):
         if streaming:
             self.hf_dataset = hf_dataset
             self.max_samples = max_samples
-            self.total_samples = max_samples if max_samples else float("inf")
         else:
             if max_samples is not None:
-                self.hf_dataset = list(hf_dataset[:max_samples])
+                subset_size = min(max_samples, len(hf_dataset))
+                self.hf_dataset = hf_dataset.select(range(subset_size))
             else:
-                self.hf_dataset = list(hf_dataset)
-            self.total_samples = len(self.hf_dataset)
+                self.hf_dataset = hf_dataset
             self._build_sequences()
 
     def _build_sequences(self):
@@ -78,7 +77,9 @@ class HuggingFaceGPTDataset(Dataset):
                 )
 
     def __len__(self):
-        return int(self.total_samples)
+        if hasattr(self, 'sequences'):
+            return len(self.sequences)
+        return 0
 
     def __iter__(self):
         count = 0

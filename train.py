@@ -229,7 +229,7 @@ if __name__ == "__main__":
         stride=128,
         shuffle=True,
         streaming=False,
-        max_samples=100000,
+        max_samples=None,
         is_distributed=is_distributed,
     )
 
@@ -301,10 +301,10 @@ if __name__ == "__main__":
             if rank == 0:
                 model_path = snapshot_download(
                     repo_id="CuriousDragon/gpt-tinystories",
-                    allow_patterns=["pytorch_model.pt"],
+                    allow_patterns=["checkpoint_epoch_3.pt"],
                     token=hf_token,
                 )
-                hf_weights_path = f"{model_path}/pytorch_model.pt"
+                hf_weights_path = f"{model_path}/checkpoint_epoch_3.pt"
             else:
                 hf_weights_path = None
             

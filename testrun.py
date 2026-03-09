@@ -37,17 +37,17 @@ def main():
         qkv_bias=True,
     )
 
-    print("--- Fetching checkpont pytorch_model.pt via HF API ---")
+    print("--- Fetching checkpoint_epoch_3.pt via HF API ---")
     print(f"Using token: {'Yes' if HF_TOKEN else 'No (anonymous - will be slow)'}")
 
     from huggingface_hub import snapshot_download
 
     model_path = snapshot_download(
         repo_id="CuriousDragon/gpt-tinystories",
-        allow_patterns=["pytorch_model.pt"],
+        allow_patterns=["checkpoint_epoch_3.pt"],
         token=HF_TOKEN,
     )
-    path = f"{model_path}/pytorch_model.pt"
+    path = f"{model_path}/checkpoint_epoch_3.pt"
 
     print("\n--- Binding Weights... ---")
     state_payload = torch.load(path, map_location=device)

@@ -66,7 +66,8 @@ class HuggingFaceGPTDataset(Dataset):
     def _build_sequences(self):
         self.sequences = []
         for example in tqdm(self.hf_dataset, desc="Tokenizing"):
-            text = example["text"]
+            # Handle depending on if huggingface dataset returns dict or raw string when listed
+            text = example["text"] if isinstance(example, dict) else example
             token_ids = self.tokenizer.encode(text)
 
             for i in range(0, len(token_ids) - self.max_length, self.stride):

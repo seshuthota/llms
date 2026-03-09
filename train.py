@@ -171,6 +171,19 @@ def train_model(
             if logger:
                 logger.info(f"Checkpoint saved: {checkpoint_path}")
 
+            # Auto-cleanup: keep only the 2 most recent epoch checkpoints
+            keep_latest = 2
+            epoch_checkpoints = sorted([
+                f for f in os.listdir(save_dir)
+                if f.startswith("checkpoint_epoch_") and f.endswith(".pt")
+            ])
+            if len(epoch_checkpoints) > keep_latest:
+                for old_ckpt in epoch_checkpoints[:-keep_latest]:
+                    old_path = os.path.join(save_dir, old_ckpt)
+                    os.remove(old_path)
+                    if logger:
+                        logger.info(f"Removed old checkpoint: {old_path}")
+
     if rank == 0:
         print("Training finished.")
     return model, history

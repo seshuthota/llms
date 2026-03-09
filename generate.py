@@ -7,9 +7,10 @@ def generate_text(
     model, tokenizer, prompt, max_new_tokens=100, temperature=1.0, top_k=None
 ):
     model.eval()
+    device = next(model.parameters()).device
 
     input_ids = tokenizer.encode(prompt)
-    input_ids = torch.tensor(input_ids).unsqueeze(0)
+    input_ids = torch.tensor(input_ids).unsqueeze(0).to(device)
 
     for _ in range(max_new_tokens):
         with torch.no_grad():

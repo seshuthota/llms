@@ -11,7 +11,6 @@ import json
 from huggingface_hub import snapshot_download
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data.distributed import DistributedSampler
 
 
 def setup_logging(log_dir="logs"):
@@ -204,6 +203,9 @@ if __name__ == "__main__":
         
     dataset = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
     
+    if is_distributed:
+        dataset = dataset.shard(num_shards=world_size, index=rank)
+    
     if rank == 0:
         logger.info("Dataset loaded in streaming mode")
 
@@ -232,10 +234,9 @@ if __name__ == "__main__":
         batch_size=1,  # Small batch for memory
         max_length=1024,
         stride=128,
-        shuffle=(not is_distributed), # DistributedSampler handles shuffling
+        shuffle=True,
         streaming=True,
         max_samples=100000,
-        sampler=DistributedSampler(dataset) if is_distributed else None,
     )
 
     model = GPTModel(

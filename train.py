@@ -201,19 +201,12 @@ if __name__ == "__main__":
 
         logger.info("Loading TinyStories dataset from HuggingFace...")
         
-    dataset = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
+    dataset = load_dataset("roneneldan/TinyStories", split="train")
     
-    if is_distributed:
-        dataset = dataset.shard(num_shards=world_size, index=rank)
+    use_streaming = False
     
     if rank == 0:
-        logger.info("Dataset loaded in streaming mode")
-
-    max_samples = None  # Use None for full dataset, or set to integer for subset
-
-    use_streaming = True
-    if use_streaming and rank == 0:
-        logger.info("Using streaming mode for memory efficiency")
+        logger.info("Dataset downloaded to local cache.")
 
     if rank == 0:
         logger.info(f"Using device: {device}")
@@ -235,8 +228,9 @@ if __name__ == "__main__":
         max_length=1024,
         stride=128,
         shuffle=True,
-        streaming=True,
+        streaming=False,
         max_samples=100000,
+        is_distributed=is_distributed,
     )
 
     model = GPTModel(

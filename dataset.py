@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from tokenizer import GPTTokenizer
 from tqdm import tqdm
 
@@ -158,6 +159,7 @@ def create_dataloader_from_huggingface(
     shuffle=True,
     max_samples=None,
     streaming=False,
+    is_distributed=False,
 ):
     if streaming:
         return StreamingDataLoader(
@@ -172,7 +174,16 @@ def create_dataloader_from_huggingface(
     dataset = HuggingFaceGPTDataset(
         hf_dataset, tokenizer, max_length, stride, max_samples
     )
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+    sampler = DistributedSampler(dataset) if is_distributed else None
+    
+    dataloader = DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        shuffle=(shuffle and sampler is None),
+        sampler=sampler,
+        num_workers=2,
+        pin_memory=True
+    )
     return dataloader
 
 

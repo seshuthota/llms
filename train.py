@@ -314,10 +314,10 @@ if __name__ == "__main__":
             if rank == 0:
                 model_path = snapshot_download(
                     repo_id="CuriousDragon/gpt-tinystories",
-                    allow_patterns=["checkpoint_epoch_3.pt"],
+                    allow_patterns=["gpt_model_v2.pt"],
                     token=hf_token,
                 )
-                hf_weights_path = f"{model_path}/checkpoint_epoch_3.pt"
+                hf_weights_path = f"{model_path}/gpt_model_v2.pt"
             else:
                 hf_weights_path = None
             

@@ -223,8 +223,13 @@ class InstructionDataset(Dataset):
         if len(prompt_tokens) > available_prompt:
             prompt_tokens = prompt_tokens[-available_prompt:]
 
-        input_ids = prompt_tokens + response_tokens
-        labels = ([-100] * len(prompt_tokens)) + response_tokens
+        sequence = prompt_tokens + response_tokens
+        if len(sequence) < 2:
+            sequence = sequence + [self.eot_id]
+
+        # External next-token shift: predict sequence[t + 1] from sequence[t].
+        input_ids = sequence[:-1]
+        labels = ([-100] * max(len(prompt_tokens) - 1, 0)) + sequence[len(prompt_tokens):]
 
         return {
             "input_ids": torch.tensor(input_ids, dtype=torch.long),
